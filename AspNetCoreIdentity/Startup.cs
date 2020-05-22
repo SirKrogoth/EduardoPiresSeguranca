@@ -1,6 +1,9 @@
 ﻿using AspNetCoreIdentity.Areas.Identity.Data;
 using AspNetCoreIdentity.Config;
 using AspNetCoreIdentity.Extensions;
+using KissLog;
+using KissLog.Apis.v1.Listeners;
+using KissLog.AspNetCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -23,8 +26,13 @@ namespace AspNetCoreIdentity
             var builder = new ConfigurationBuilder()
                 .SetBasePath(hostingEnvironment.ContentRootPath)
                 .AddJsonFile("appsettings.json", true, true)
-                .AddJsonFile($"appsettings.{hostingEnvironment}.json", true, true)
+                .AddJsonFile($"appsettings.{hostingEnvironment.EnvironmentName}.json", true, true)
                 .AddEnvironmentVariables();
+
+            if (hostingEnvironment.IsProduction())
+            {
+                builder.AddUserSecrets<Startup>();
+            }
 
             Configuration = builder.Build();
         }        
@@ -45,7 +53,8 @@ namespace AspNetCoreIdentity
             }
             else
             {
-                app.UseExceptionHandler("/Home/Error");
+                app.UseExceptionHandler("/erro/500");
+                app.UseStatusCodePagesWithRedirects("/erro/{0}");
                 app.UseHsts();
             }
 
@@ -54,6 +63,17 @@ namespace AspNetCoreIdentity
             app.UseCookiePolicy();
 
             app.UseAuthentication();
+
+            app.UseKissLogMiddleware();
+
+            // make sure it is added after app.UseStaticFiles() and app.UseSession(), and before app.UseMvc()
+            app.UseKissLogMiddleware(options => {
+                options.Listeners.Add(new KissLogApiListener(new KissLog.Apis.v1.Auth.Application(
+                    Configuration["KissLog.OrganizationId"],
+                    Configuration["KissLog.ApplicationId"])
+                ));
+            });
+
 
             app.UseMvc(routes =>
             {
